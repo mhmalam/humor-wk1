@@ -19,13 +19,12 @@ export async function submitVote(captionId: string, voteType: 'upvote' | 'downvo
   // Convert vote type to numeric value: upvote = 1, downvote = -1
   const voteValue = voteType === 'upvote' ? 1 : -1
   
-  const now = new Date().toISOString()
-
   const voteData = {
     caption_id: captionId,
     profile_id: user.id,
     vote_value: voteValue,
-    created_datetime_utc: now
+    created_by_user_id: user.id,
+    modified_by_user_id: user.id
   }
 
   console.log('Inserting vote with data:', voteData)
