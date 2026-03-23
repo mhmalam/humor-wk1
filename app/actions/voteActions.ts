@@ -21,6 +21,7 @@ export async function submitVote(captionId: string, voteType: 'upvote' | 'downvo
   
   const voteData = {
     caption_id: captionId,
+    user_id: user.id,
     profile_id: user.id,
     vote_value: voteValue,
     created_by_user_id: user.id,
