@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect } from 'react'
 import { submitVote } from '@/app/actions/voteActions'
 
 interface Image {
@@ -13,132 +13,94 @@ interface Caption {
   id: string
   content: string
   image_id: string
-  url?: string  // URL might be directly on caption
-  images?: Image  // Or nested in images relation
+  url?: string
+  images?: Image | null
   [key: string]: any
 }
 
 interface SwipeableCardsProps {
   captions: Caption[]
   userId: string
+  /** Taller deck: page hides footer while voting */
+  compactChrome?: boolean
 }
 
-export default function SwipeableCards({ captions, userId }: SwipeableCardsProps) {
+export default function SwipeableCards({
+  captions,
+  userId,
+  compactChrome = false,
+}: SwipeableCardsProps) {
   const [mounted, setMounted] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [voteQueue, setVoteQueue] = useState<Array<{ captionId: string, voteType: 'upvote' | 'downvote' }>>([])
-  const [votedCaptions, setVotedCaptions] = useState<Set<string>>(new Set())
+  const [isSubmittingVote, setIsSubmittingVote] = useState(false)
+  const [voteError, setVoteError] = useState<string | null>(null)
   const [imageError, setImageError] = useState(false)
-  const processingRef = useRef(false)
+  /** Hide image until decoded so we don’t flash the previous card’s bitmap */
+  const [imageReady, setImageReady] = useState(false)
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Reset image error when caption changes
   useEffect(() => {
     setImageError(false)
   }, [currentIndex])
 
-  // Fast parallel vote processing
-  useEffect(() => {
-    if (voteQueue.length === 0 || processingRef.current) return
+  useLayoutEffect(() => {
+    setImageReady(false)
+  }, [currentIndex])
 
-    const processAllVotes = async () => {
-      processingRef.current = true
-      
-      // Process all votes in parallel for maximum speed
-      const promises = voteQueue.map(vote => 
-        submitVote(vote.captionId, vote.voteType)
-          .then(result => {
-            if (result.success) {
-              console.log('Vote processed:', vote.captionId)
-            } else {
-              // Only log non-duplicate errors
-              if (!result.error?.includes('duplicate') && !result.error?.includes('already exists')) {
-                console.error('Vote failed:', result.error)
-              }
-            }
-            return result
-          })
-          .catch(err => {
-            console.error('Vote error:', err)
-            return { success: false, error: err.message }
-          })
-      )
-      
-      await Promise.all(promises)
-      
-      // Clear the queue
-      setVoteQueue([])
-      processingRef.current = false
-    }
-
-    processAllVotes()
-  }, [voteQueue.length])
-
-  // Preload next 3 images
   useEffect(() => {
     if (!mounted) return
-    
+
     const preloadImages = () => {
       for (let i = currentIndex + 1; i <= Math.min(currentIndex + 3, captions.length - 1); i++) {
         const url = captions[i]?.images?.url || captions[i]?.url
         if (url) {
-          const img = new Image()
+          const img = new window.Image()
           img.src = `/api/image?url=${encodeURIComponent(url)}`
         }
       }
     }
-    
+
     preloadImages()
   }, [mounted, currentIndex, captions])
 
   const currentCaption = captions[currentIndex]
 
-  const handleVote = (voteType: 'upvote' | 'downvote') => {
-    if (!currentCaption) return
+  const deckHeightClass = compactChrome
+    ? 'h-[calc(100dvh-12rem)] max-h-[min(720px,calc(100dvh-12rem))]'
+    : 'h-[calc(100dvh-17rem)] max-h-[640px]'
 
-    // Skip if already voted on this caption
-    if (votedCaptions.has(currentCaption.id)) {
-      console.log('Already voted on this caption, skipping...')
-      setCurrentIndex(prev => prev + 1)
-      return
+  const handleVote = async (voteType: 'upvote' | 'downvote') => {
+    if (!currentCaption || isSubmittingVote || !userId) return
+
+    setVoteError(null)
+    setIsSubmittingVote(true)
+
+    try {
+      const result = await submitVote(currentCaption.id, voteType)
+      if (result.success) {
+        setCurrentIndex((prev) => prev + 1)
+      } else {
+        setVoteError(result.error ?? 'Vote failed')
+      }
+    } catch (e: unknown) {
+      setVoteError(e instanceof Error ? e.message : 'Vote failed')
+    } finally {
+      setIsSubmittingVote(false)
     }
-
-    // Mark as voted
-    setVotedCaptions(prev => new Set(prev).add(currentCaption.id))
-
-    // Add to queue
-    setVoteQueue(prev => [...prev, { 
-      captionId: currentCaption.id, 
-      voteType 
-    }])
-    
-    console.log('Vote queued:', { 
-      captionId: currentCaption.id,
-      voteType,
-      queueLength: voteQueue.length + 1
-    })
-    
-    // Instantly move to next caption
-    setCurrentIndex(prev => prev + 1)
   }
 
   if (!mounted) {
     return (
-      <div className="flex flex-col items-center justify-center w-full max-w-lg mx-auto px-4">
-        <div className="w-full mb-4">
-          <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full w-0 bg-gradient-to-r from-blue-500 to-cyan-500"></div>
-          </div>
-        </div>
-        <div className="relative w-full aspect-[4/5] mb-4">
-          <div className="w-full h-full bg-slate-800 rounded-2xl animate-pulse"></div>
-        </div>
-        <div className="flex items-center justify-center gap-6 mb-4">
-          <div className="w-16 h-16 bg-slate-800 rounded-full animate-pulse"></div>
-          <div className="w-16 h-16 bg-slate-800 rounded-full animate-pulse"></div>
+      <div
+        className={`flex min-h-[280px] w-full max-w-md mx-auto flex-col items-center justify-center gap-3 px-3 ${deckHeightClass}`}
+      >
+        <div className="flex-1 min-h-0 w-full rounded-2xl bg-slate-800 animate-pulse" />
+        <div className="flex shrink-0 gap-5 justify-center">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-800 rounded-full animate-pulse" />
+          <div className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-800 rounded-full animate-pulse" />
         </div>
       </div>
     )
@@ -146,110 +108,112 @@ export default function SwipeableCards({ captions, userId }: SwipeableCardsProps
 
   if (!currentCaption) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <div className="text-8xl animate-bounce">🎉🎊🎉</div>
-        <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 uppercase">
-          YOOO YOU DID IT!!!
-        </h2>
-        <p className="text-yellow-400 text-xl font-bold animate-pulse">ALL CAPTIONS RATED FR FR</p>
+      <div
+        className={`flex min-h-[240px] w-full max-w-md mx-auto flex-col items-center justify-center gap-3 px-3 text-center ${deckHeightClass}`}
+      >
+        <div className="text-5xl sm:text-6xl">🎉</div>
+        <h2 className="text-xl sm:text-2xl font-bold text-white">All caught up</h2>
+        <p className="text-slate-400 text-sm">You&apos;ve rated every caption in the feed.</p>
         <button
+          type="button"
           onClick={() => setCurrentIndex(0)}
-          className="px-8 py-4 bg-gradient-to-r from-pink-600 via-purple-600 to-blue-600 text-white rounded-2xl font-black text-lg hover:scale-110 transition-transform border-4 border-yellow-400 shadow-2xl uppercase animate-pulse"
+          className="mt-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-semibold transition-colors"
         >
-          DO IT AGAIN! 🔥
+          Start over
         </button>
       </div>
     )
   }
 
   const imageUrl = currentCaption.images?.url || currentCaption.url
-  
-  // Use proxy to avoid CORS when loading external images
   const imageSrc = imageUrl ? `/api/image?url=${encodeURIComponent(imageUrl)}` : undefined
-  
-  // Log image URL for debugging
-  console.log('Current caption:', currentCaption)
-  console.log('Image URL from images.url:', currentCaption.images?.url)
-  console.log('Image URL from url:', currentCaption.url)
-  console.log('Final image URL used:', imageSrc)
 
   return (
-    <div className="flex flex-col items-center justify-center w-full max-w-lg mx-auto px-4">
-      {/* Card - Clean professional style */}
-      <div className="relative w-full aspect-[4/5] mb-6 transition-transform hover:scale-[1.02]">
-        <div className="w-full h-full rounded-2xl overflow-hidden shadow-2xl">
-          {/* Image with overlay */}
-          <div className="relative w-full h-full bg-slate-900">
-            {!imageError ? (
-              <img 
-                src={imageSrc} 
-                alt="Caption image" 
-                className="w-full h-full object-cover"
-                loading="eager"
-                fetchPriority="high"
-                onError={(e) => {
-                  console.error('Image failed to load:', imageUrl)
-                  setImageError(true)
-                }}
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 p-8">
-                <div className="text-6xl mb-4">🖼️</div>
-                <p className="text-slate-400 text-center text-sm mb-2">Image failed to load</p>
-                <p className="text-slate-600 text-xs text-center break-all">{imageUrl}</p>
-                <button 
+    <div
+      className={`flex min-h-[280px] w-full max-w-md mx-auto flex-col items-stretch gap-2 px-3 min-h-0 ${deckHeightClass}`}
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+        <div className="relative min-h-0 flex-1 w-full rounded-2xl overflow-hidden bg-slate-900 shadow-2xl">
+          {!imageError && imageSrc ? (
+            <img
+              key={currentCaption.id}
+              src={imageSrc}
+              alt=""
+              className={`h-full w-full object-cover transition-opacity duration-200 ease-out ${
+                imageReady ? 'opacity-100' : 'opacity-0'
+              }`}
+              loading="eager"
+              fetchPriority="high"
+              onLoad={() => setImageReady(true)}
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <div className="h-full w-full flex flex-col items-center justify-center bg-slate-800 p-4">
+              <div className="text-4xl mb-2">🖼️</div>
+              <p className="text-slate-400 text-center text-xs">Image unavailable</p>
+              {imageUrl && (
+                <button
+                  type="button"
                   onClick={() => setImageError(false)}
-                  className="mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-white"
+                  className="mt-3 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs text-white"
                 >
                   Retry
                 </button>
-              </div>
-            )}
-            
-            {/* Clean gradient overlay */}
-            {!imageError && (
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
-            )}
-            
-            {/* Caption overlay - Professional */}
-            <div className="absolute bottom-0 left-0 right-0 p-8">
-              <p className="text-2xl leading-snug text-white font-bold text-center">
-                {currentCaption.content}
-              </p>
+              )}
             </div>
-          </div>
-        </div>
-      </div>
+          )}
 
-      {/* Action Buttons - Clean thumbs */}
-      <div className="flex items-center justify-center gap-6 mb-4">
-        <button
-          onClick={() => handleVote('downvote')}
-          className="relative w-20 h-20 bg-slate-800 hover:bg-red-600 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 shadow-lg"
-          aria-label="Thumbs Down"
-        >
-          <span className="text-5xl">
+          {!imageError && imageSrc && (
+            <>
+              <div
+                className={`pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent transition-opacity duration-200 ease-out ${
+                  imageReady ? 'opacity-100' : 'opacity-0'
+                }`}
+              />
+              <div
+                className={`absolute bottom-0 left-0 right-0 p-3 sm:p-4 transition-opacity duration-200 ease-out ${
+                  imageReady ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
+                <p className="text-center text-base sm:text-lg font-bold leading-snug text-white line-clamp-4 [text-shadow:0_1px_8px_rgba(0,0,0,0.9)]">
+                  {currentCaption.content}
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center justify-center gap-5 sm:gap-6 py-1">
+          <button
+            type="button"
+            disabled={isSubmittingVote}
+            onClick={() => handleVote('downvote')}
+            className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-800 text-4xl shadow-lg transition-all hover:bg-red-600 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none disabled:hover:scale-100 sm:h-16 sm:w-16 sm:text-5xl"
+            aria-label="Thumbs down"
+          >
             👎
-          </span>
-        </button>
+          </button>
 
-        <button
-          onClick={() => handleVote('upvote')}
-          className="relative w-20 h-20 bg-slate-800 hover:bg-green-600 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 shadow-lg"
-          aria-label="Thumbs Up"
-        >
-          <span className="text-5xl">
+          <button
+            type="button"
+            disabled={isSubmittingVote}
+            onClick={() => handleVote('upvote')}
+            className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-800 text-4xl shadow-lg transition-all hover:bg-green-600 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none disabled:hover:scale-100 sm:h-16 sm:w-16 sm:text-5xl"
+            aria-label="Thumbs up"
+          >
             👍
-          </span>
-        </button>
-      </div>
-
-      {/* Queue indicator - Clean */}
-      {voteQueue.length > 0 && (
-        <div className="bg-slate-800 text-slate-300 px-4 py-2 rounded-full text-sm font-medium">
-          Processing {voteQueue.length} vote{voteQueue.length > 1 ? 's' : ''}...
+          </button>
         </div>
-      )}
+
+        {isSubmittingVote && (
+          <p className="shrink-0 text-center text-xs text-slate-400">Saving vote…</p>
+        )}
+        {voteError && (
+          <p className="shrink-0 text-center text-xs text-red-400" role="alert">
+            {voteError}
+          </p>
+        )}
+      </div>
     </div>
   )
 }

@@ -1,7 +1,32 @@
 'use server'
 
 import { createClient } from '@/lib/supabase-server'
-import { revalidatePath } from 'next/cache'
+import type { User } from '@supabase/supabase-js'
+
+/** `caption_votes.profile_id` FK → `profiles.id` (not always equal to `auth.users.id`). */
+async function resolveProfileId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: User
+): Promise<string | null> {
+  const { data: byPk } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (byPk?.id) return byPk.id
+
+  if (user.email) {
+    const { data: byEmail } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', user.email)
+      .maybeSingle()
+    if (byEmail?.id) return byEmail.id
+  }
+
+  return null
+}
 
 export async function submitVote(captionId: string, voteType: 'upvote' | 'downvote') {
   const supabase = await createClient()
@@ -16,39 +41,42 @@ export async function submitVote(captionId: string, voteType: 'upvote' | 'downvo
     }
   }
 
-  // Convert vote type to numeric value: upvote = 1, downvote = -1
-  const voteValue = voteType === 'upvote' ? 1 : -1
-  
-  const voteData = {
-    caption_id: captionId,
-    user_id: user.id,
-    profile_id: user.id,
-    vote_value: voteValue,
-    created_by_user_id: user.id,
-    modified_by_user_id: user.id
+  const profileId = await resolveProfileId(supabase, user)
+  if (!profileId) {
+    return {
+      success: false,
+      error: 'No profile row found for this account. Check profiles.id matches your login or email.',
+    }
   }
 
-  console.log('Inserting vote with data:', voteData)
+  // caption_votes.profile_id → profiles.id; audit columns use auth user id
+  const voteValue = voteType === 'upvote' ? 1 : -1
+  const row = {
+    caption_id: captionId,
+    profile_id: profileId,
+    vote_value: voteValue,
+    created_by_user_id: user.id,
+    modified_by_user_id: user.id,
+    is_from_study: false,
+  }
 
   const { data, error } = await supabase
     .from('caption_votes')
-    .insert(voteData)
+    .upsert(row, { onConflict: 'caption_id,profile_id' })
     .select()
 
   if (error) {
     console.error('Error submitting vote:', error)
-    console.error('Error details:', JSON.stringify(error, null, 2))
-    return { 
-      success: false, 
-      error: `Database error: ${error.message}. Details: ${error.details || 'none'}. Hint: ${error.hint || 'none'}`
+    return {
+      success: false,
+      error: error.message,
     }
   }
 
-  console.log('Vote inserted successfully:', data)
-  revalidatePath('/')
-  
-  return { 
-    success: true, 
-    data 
+  // Intentionally no revalidatePath: avoids RSC refetch / layout flicker after each swipe vote.
+
+  return {
+    success: true,
+    data,
   }
 }

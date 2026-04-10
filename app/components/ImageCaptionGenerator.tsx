@@ -231,33 +231,33 @@ export default function ImageCaptionGenerator() {
             <div
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 border ${
                 isLoading
-                  ? 'border-cyan-400/90 bg-cyan-500/20 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.4)]'
+                  ? 'border-slate-600 bg-slate-900/90 text-slate-200'
                   : hasCaptions
-                  ? 'border-violet-400/90 bg-violet-500/20 text-violet-50 shadow-[0_0_18px_rgba(167,139,250,0.35)]'
+                  ? 'border-slate-600 bg-slate-900/90 text-slate-200'
                   : hasImage
-                  ? 'border-amber-400/90 bg-amber-500/20 text-amber-50 shadow-[0_0_18px_rgba(251,191,36,0.35)]'
-                  : 'border-slate-700/80 bg-slate-900/90 text-slate-200'
+                  ? 'border-slate-600 bg-slate-900/90 text-slate-200'
+                  : 'border-slate-700/80 bg-slate-900/90 text-slate-400'
               }`}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
                   isLoading
-                    ? 'bg-cyan-300 animate-pulse'
+                    ? 'bg-cyan-400/90'
                     : hasCaptions
-                    ? 'bg-violet-300 animate-pulse'
+                    ? 'bg-emerald-400/90'
                     : hasImage
-                    ? 'bg-amber-300 animate-pulse'
-                    : 'bg-slate-400'
+                    ? 'bg-amber-400/90'
+                    : 'bg-slate-500'
                 }`}
               />
               <span className="whitespace-nowrap">
                 {isLoading
-                  ? 'GENERATING CAPTIONS...'
+                  ? 'Generating…'
                   : hasCaptions
-                  ? 'CAPTIONS READY · REVIEW BELOW'
+                  ? 'Captions ready'
                   : hasImage
-                  ? 'IMAGE READY · CLICK GENERATE'
-                  : 'UPLOAD AN IMAGE TO START'}
+                  ? 'Ready — press Generate'
+                  : 'Upload an image'}
               </span>
             </div>
           </div>
@@ -361,24 +361,24 @@ export default function ImageCaptionGenerator() {
         </div>
         {previewUrl && (
           <div className="mt-4 border border-slate-800/80 rounded-2xl bg-slate-950/70 p-4 space-y-3">
-            <div className="flex items-center justify-between text-[11px] md:text-xs text-slate-400">
+            <div className="flex items-center justify-between text-[11px] md:text-xs text-slate-400 gap-2">
               <span className="font-semibold text-slate-200">
                 Caption gallery
               </span>
-              <span>
+              <span className="text-right">
                 {captions && captions.length > 0
-                  ? `Previewing ${captions.length} caption${captions.length === 1 ? '' : 's'} on your image`
-                  : 'Previewing 5 caption slots on your image'}
+                  ? `Showing all ${captions.length} caption${captions.length === 1 ? '' : 's'} — scroll sideways`
+                  : 'Placeholder preview (5 slots)'}
               </span>
             </div>
-            <div className="flex items-stretch gap-4 pb-2">
+            <div className="flex items-stretch gap-4 pb-2 overflow-x-auto overflow-y-visible [-webkit-overflow-scrolling:touch]">
               {(captions && captions.length > 0
-                ? captions.slice(0, 5)
+                ? captions
                 : Array.from({ length: 5 }, () => null)
               ).map((caption, index) => (
                 <div
                   key={(caption as any)?.id ?? index}
-                  className="flex-1 min-w-0"
+                  className="min-w-[140px] max-w-[180px] w-[28vw] sm:w-[160px] flex-shrink-0"
                 >
                   <div className="relative w-full aspect-[4/5] rounded-2xl bg-slate-900/80 border border-slate-800/80 overflow-hidden transition-transform duration-150 hover:-translate-y-1 hover:shadow-xl">
                     <img

@@ -2,10 +2,9 @@ import { supabase } from '@/lib/supabase'
 import { createClient } from '@/lib/supabase-server'
 import { getCachedImages } from '@/lib/imageCache'
 import ImageGallery from './components/ImageGallery'
-import SwipeableCards from './components/SwipeableCards'
 import LoginGate from './components/LoginGate'
 import UserProfile from './components/UserProfile'
-import ImageCaptionGenerator from './components/ImageCaptionGenerator'
+import HomeWorkspace from './components/HomeWorkspace'
 
 interface Image {
   id: string
@@ -102,49 +101,23 @@ export default async function Home() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-6 pt-20 max-w-6xl relative z-10">
-        {/* Hero Header */}
-        <header className="mb-6 text-center relative px-4">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-2 tracking-tight font-[family-name:var(--font-space-grotesk)] uppercase">
+      <div className="container mx-auto px-4 py-4 sm:py-6 pt-16 sm:pt-20 max-w-6xl relative z-10">
+        {/* Hero Header — compact vertical rhythm so vote tab fits one screen */}
+        <header className="mb-3 sm:mb-4 text-center relative px-4">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1 sm:mb-2 tracking-tight font-[family-name:var(--font-space-grotesk)] uppercase">
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">MEME </span>
             <span className="text-white">CAPTION LAB</span>
           </h1>
-          <p className="text-sm md:text-base text-slate-300 max-w-xl mx-auto font-medium">
-            Generate fresh meme captions and then vote on the funniest ones.
+          <p className="text-xs sm:text-sm md:text-base text-slate-300 max-w-xl mx-auto font-medium leading-snug">
+            Upload a meme to generate captions, or swipe through the feed to vote.
           </p>
         </header>
 
-        {/* Image upload + caption generation */}
-        <ImageCaptionGenerator />
-
-        {error && (
-          <div className="mb-12 p-6 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-2xl shadow-sm">
-            <p className="text-red-700 dark:text-red-300 text-base">
-              Error loading captions: {error.message}
-            </p>
-          </div>
-        )}
-
-        {/* Swipeable Cards */}
-        <div className="flex items-center justify-center min-h-[60vh]">
-          {captions && captions.length > 0 ? (
-            <SwipeableCards captions={captions} userId={user.id} />
-          ) : !error ? (
-            <div className="text-center py-12">
-              <div className="text-5xl mb-3 opacity-50">💭</div>
-              <p className="text-slate-400 text-base">
-                No captions found yet
-              </p>
-            </div>
-          ) : null}
-        </div>
-
-        {/* Footer */}
-        <footer className="mt-8 text-center pb-4">
-          <p className="text-slate-600 text-xs font-[family-name:var(--font-space-grotesk)] tracking-wide">
-            THE HUMOR PROJECT
-          </p>
-        </footer>
+        <HomeWorkspace
+          captions={captions}
+          userId={user.id}
+          captionsErrorMessage={error?.message ?? null}
+        />
       </div>
 
       {/* User Profile Button */}
